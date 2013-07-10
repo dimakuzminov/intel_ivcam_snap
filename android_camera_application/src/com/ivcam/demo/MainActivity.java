@@ -1,11 +1,12 @@
 package com.ivcam.demo;
 
 import android.app.Activity;
-import android.content.pm.PackageManager;
 import android.hardware.Camera;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.Button;
@@ -13,7 +14,7 @@ import android.widget.FrameLayout;
 import android.widget.TextView;
 
 public class MainActivity extends Activity implements OnClickListener {
-	public static final String TAG = "TestCameras";
+	public static final String TAG = "ivcam.demo.main";
 	private Camera mCamera = null;
 	private Button mCam0;
 	private Button mCam1;
@@ -82,22 +83,20 @@ public class MainActivity extends Activity implements OnClickListener {
 		info.setText(buffer.toString());
 	}
 
+	@SuppressWarnings("deprecation")
 	private void getCamerasPreview(int id) {
-		PackageManager pm = getPackageManager();
-		if (pm.hasSystemFeature(PackageManager.FEATURE_CAMERA_FRONT)) {
-			Log.i(TAG, "Phone has a frontal camera.");
-		}
+	    SurfaceView camView = new SurfaceView(this);
+	    SurfaceHolder camHolder = camView.getHolder();
+	    int width = 352;
+	    int height = 288;
+
+	    CameraPreview preview = new CameraPreview(width, height, id);
+
+	    camHolder.addCallback(preview);
+	    camHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+
 		FrameLayout layout = (FrameLayout) findViewById(R.id.camera_preview);
-		if (mCamera != null) {
-			mCamera.release();
-			layout.removeAllViews();
-		}
-		mCamera = getCameraInstance(id);
-		if (mCamera == null) {
-			return;
-		}
-		CameraPreview preview = new CameraPreview(this, mCamera, id);
-		layout.addView(preview);
+		layout.addView(camView);
 	}
 
 	public static Camera getCameraInstance(int id) {
