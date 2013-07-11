@@ -13,8 +13,6 @@ import android.view.SurfaceHolder;
 public class CameraPreview implements SurfaceHolder.Callback,
 		Camera.PreviewCallback {
 	public static final String TAG = "ivcam.demo.preview";
-    int PreviewSizeWidth;
-    int PreviewSizeHeight;
     SurfaceHolder mSurfHolder;
     Camera mCamera;
     int mCamId;
@@ -36,9 +34,21 @@ public class CameraPreview implements SurfaceHolder.Callback,
 
     }
 
-    public CameraPreview(int PreviewlayoutWidth, int PreviewlayoutHeight, int camId) {
-        PreviewSizeWidth = PreviewlayoutWidth;
-        PreviewSizeHeight = PreviewlayoutHeight;
+	public Camera.Size getBestPreviewSize(Camera.Parameters parameters) {
+		Camera.Size result = null;
+		int width = 0;
+		int height = 0;
+		for (Camera.Size size : parameters.getSupportedPreviewSizes()) {
+			if (size.width > width && size.height > height) {
+				width = size.width;
+				height = size.height;
+				result = size;
+			}
+		}
+		return (result);
+	}
+    
+    public CameraPreview(int camId) {
         mCamId = camId;
     }
 
@@ -49,7 +59,8 @@ public class CameraPreview implements SurfaceHolder.Callback,
         mSurfHolder = arg0;
 
         parameters = mCamera.getParameters();
-        parameters.setPreviewSize(PreviewSizeWidth, PreviewSizeHeight);
+        Camera.Size size = getBestPreviewSize(parameters);
+        parameters.setPreviewSize(size.width, size.height);
 
         mCamera.setParameters(parameters);
         mCamera.startPreview();
@@ -61,9 +72,10 @@ public class CameraPreview implements SurfaceHolder.Callback,
             // If did not set the SurfaceHolder, the preview area will be black.
             mCamera.setPreviewDisplay(arg0);
             mCamera.setPreviewCallback(this);
-            Parameters p = mCamera.getParameters();
-            p.setPreviewSize(PreviewSizeWidth, PreviewSizeHeight);
-            mCamera.setParameters(p);
+            Parameters parameters = mCamera.getParameters();
+            Camera.Size size = getBestPreviewSize(parameters);
+            parameters.setPreviewSize(size.width, size.height);
+            mCamera.setParameters(parameters);
         } catch (IOException e) {
             mCamera.release();
             mCamera = null;

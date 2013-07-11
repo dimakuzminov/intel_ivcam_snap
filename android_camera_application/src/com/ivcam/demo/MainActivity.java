@@ -87,27 +87,11 @@ public class MainActivity extends Activity implements OnClickListener {
 	private void getCamerasPreview(int id) {
 	    SurfaceView camView = new SurfaceView(this);
 	    SurfaceHolder camHolder = camView.getHolder();
-	    int width = 352;
-	    int height = 288;
-
-	    CameraPreview preview = new CameraPreview(width, height, id);
-
+	    CameraPreview preview = new CameraPreview(id);
 	    camHolder.addCallback(preview);
-	    camHolder.setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
-
 		FrameLayout layout = (FrameLayout) findViewById(R.id.camera_preview);
 		layout.addView(camView);
 	}
 
-	public static Camera getCameraInstance(int id) {
-		Camera camera = null;
-		try {
-			Log.i(TAG, "Try to open camera id " + id);
-			camera = Camera.open(id);
-		} catch (Exception e) {
-			Log.e(TAG, "Cannot get camera " + id + "," + e.toString());
-		}
-		return camera;
-	}
 
 }
