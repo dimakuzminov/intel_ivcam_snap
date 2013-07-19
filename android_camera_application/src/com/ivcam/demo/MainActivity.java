@@ -71,6 +71,13 @@ public class MainActivity extends Activity implements OnClickListener {
 		Log.i(TAG, "Number of cameras:" + cameraCount);
 		StringBuffer buffer = new StringBuffer();
 		for (int camIdx = 0; camIdx < cameraCount; camIdx++) {
+//			if(camIdx != 2){
+				Camera mcam = Camera.open(camIdx);
+				Camera.Parameters cameraParams = mcam.getParameters();
+				String str = cameraParams.flatten();
+				Log.i(TAG, "info " + str + "\n");
+				mcam.release();
+//			}
 			Camera.getCameraInfo(camIdx, cameraInfo);
 			String facing = cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_FRONT ? "front"
 					: cameraInfo.facing == Camera.CameraInfo.CAMERA_FACING_BACK ? "back"
