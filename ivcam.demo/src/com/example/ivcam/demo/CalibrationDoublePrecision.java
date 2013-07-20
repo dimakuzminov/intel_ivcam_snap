@@ -26,9 +26,9 @@ public class CalibrationDoublePrecision {
 		public double x;
 		public double y;
 
-		public Point(int x, int y) {
-			this.x = x;
-			this.y = y;
+		public Point(double _x, double _y) {
+			x = _x;
+			y = _y;
 		}
 	};
 
@@ -204,7 +204,7 @@ public class CalibrationDoublePrecision {
 
 		double x = dx / dz;
 		double y = dy / dz;
-		return new Point((int) x, (int) y);
+		return new Point(x, y);
 	}
 
 	public void unproject(int u, int v, int _d, double[] x, double[] y, double[] z) {
