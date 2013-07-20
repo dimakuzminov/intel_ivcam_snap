@@ -22,11 +22,10 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 	private int mPositionHandle;
 	private int mColorHandle;
 	private final int mBytesPerFloat = 4;
-	private final int mStrideBytes = 7 * mBytesPerFloat;	
+	private final int mStrideBytes = mBytesPerFloat*3;
 	private final int mPositionOffset = 0;
 	private final int mPositionDataSize = 3;
-	private final int mColorOffset = 3;
-	private final int mColorDataSize = 4;		
+	private int mNumberOfVertices = 0;
 	public volatile float mDeltaX;					
 	public volatile float mDeltaY;	
 	private CalibrationDoublePrecision mCalibration;
@@ -34,8 +33,34 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 	
 	public Grey3DOpenGlRender(double[] calibration, int[] depth, int width, int height)
 	{	
-		mCalibration = new CalibrationDoublePrecision(calibration, Calibration.nParamters());
+		mCalibration = new CalibrationDoublePrecision(calibration, CalibrationDoublePrecision.nParamters());
 		setVertices(depth, width, height);
+	}
+	
+	private Boolean truePoint(double x, double y, double z) {
+		if (x != 0.0 && y != 0.0 && z != 0.0 && x != -0.0 && y != -0.0
+				&& z != -0.0) {
+			return true;
+		}
+		return false;
+	}
+
+	private int getVerticesNumber(int[] depth, int width, int height) {
+		int i = 0;
+		int j = 0;
+		int counter = 0;
+		double[] x = new double[1];
+		double[] y = new double[1];
+		double[] z = new double[1];
+		for (; i < width; i++) {
+			for (j = 0; j < height; j++) {
+				mCalibration.unproject(i, j, depth[j * width + i], x, y, z);
+				if (truePoint(x[0],y[0],z[0])) {
+					counter++;
+				}
+			}
+		}
+		return counter;
 	}
 	
 	private void setVertices(int[] depth, int width, int height) {
@@ -45,25 +70,22 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 		double[] x = new double[1];
 		double[] y = new double[1];
 		double[] z = new double[1];
-		int virticesRawSize=width*height*mStrideBytes;
-		float[] vrtRawData = new float[virticesRawSize];
+		mNumberOfVertices = getVerticesNumber(depth, width, height);
+		int virticesRawSize = mNumberOfVertices*mStrideBytes;
+		float[] vrtRawData = new float[virticesRawSize/mBytesPerFloat];
 		for (; i < width; i++) {
-			for (; j < height; j++) {
-				mCalibration.unproject(i, j, depth[j*width+i], x, y, z);
-				//Coordinate section
-				vrtRawData[vId++] = (float)x[0]; 
-				vrtRawData[vId++] = (float)y[0]; 
-				vrtRawData[vId++] = (float)z[0];
-				//RGBA section
-				byte green = (byte)(depth[j*width+i]&0xff);
-				byte blue = (byte)(depth[j*width+i]>>8);
-				vrtRawData[vId++] = 0.0f; 
-				vrtRawData[vId++] = ((float)green)/255.0f; 
-				vrtRawData[vId++] = ((float)blue)/255.0f; 
-				vrtRawData[vId++] = 1.0f; 
+			for (j = 0; j < height; j++) {
+				mCalibration.unproject(i, j, depth[j * width + i], x, y, z);
+				if (truePoint(x[0], y[0], z[0])) {
+					vrtRawData[vId++] = (float) x[0];
+					vrtRawData[vId++] = (float) y[0];
+					vrtRawData[vId++] = (float) z[0];
+				}
 			}
 		}
-		mImageVertices = ByteBuffer.allocateDirect(vrtRawData.length * mBytesPerFloat).order(ByteOrder.nativeOrder()).asFloatBuffer();
+		mImageVertices = ByteBuffer
+				.allocateDirect(vrtRawData.length * mBytesPerFloat)
+				.order(ByteOrder.nativeOrder()).asFloatBuffer();
 		mImageVertices.put(vrtRawData).position(0);
 	}
 	
@@ -88,23 +110,17 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 		Matrix.setLookAtM(mViewMatrix, 0, eyeX, eyeY, eyeZ, lookX, lookY, lookZ, upX, upY, upZ);
 		final String vertexShader =
 			"uniform mat4 u_MVPMatrix;      \n"		// A constant representing the combined model/view/projection matrix.
-			
 		  + "attribute vec4 a_Position;     \n"		// Per-vertex position information we will pass in.
-		  + "attribute vec4 a_Color;        \n"		// Per-vertex color information we will pass in.			  
-		  
-		  + "varying vec4 v_Color;          \n"		// This will be passed into the fragment shader.
-		  
+ 
 		  + "void main()                    \n"		// The entry point for our vertex shader.
 		  + "{                              \n"
-		  + "   v_Color = a_Color;          \n"		// Pass the color through to the fragment shader. 
-		  											// It will be interpolated across the triangle.
 		  + "   gl_Position = u_MVPMatrix   \n" 	// gl_Position is a special variable used to store the final position.
 		  + "               * a_Position;   \n"     // Multiply the vertex by the matrix to get the final point in 			                                            			 
 		  + "}                              \n";    // normalized screen coordinates.
 		final String fragmentShader =
 			"precision mediump float;       \n"		// Set the default precision to medium. We don't need as high of a 
 													// precision in the fragment shader.				
-		  + "varying vec4 v_Color;          \n"		// This is the color from the vertex shader interpolated across the 
+		  + "uniform vec4 v_Color;          \n"		// This is the color from the vertex shader interpolated across the 
 		  											// triangle per fragment.			  
 		  + "void main()                    \n"		// The entry point for our fragment shader.
 		  + "{                              \n"
@@ -164,7 +180,7 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 			GLES20.glAttachShader(programHandle, fragmentShaderHandle);
 			// Bind attributes
 			GLES20.glBindAttribLocation(programHandle, 0, "a_Position");
-			GLES20.glBindAttribLocation(programHandle, 1, "a_Color");
+			GLES20.glBindAttribLocation(programHandle, 1, "v_Color");
 			// Link the two shaders together into a program.
 			GLES20.glLinkProgram(programHandle);
 			// Get the link status.
@@ -220,24 +236,16 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
      }	
 	
 	private void drawImageAsPointsCloud(FloatBuffer buffer)
-	{		
-		// Pass in the position information
+	{	
+		float color[] = {0.0f,0.5f,0.0f,1.0f};
+		GLES20.glUniform4fv(mColorHandle, 1, color, 0);
 		buffer.position(mPositionOffset);
         GLES20.glVertexAttribPointer(mPositionHandle, mPositionDataSize, GLES20.GL_FLOAT, false,
         		mStrideBytes, buffer);        
         GLES20.glEnableVertexAttribArray(mPositionHandle);        
-        // Pass in the color information
-        buffer.position(mColorOffset);
-        GLES20.glVertexAttribPointer(mColorHandle, mColorDataSize, GLES20.GL_FLOAT, false,
-        		mStrideBytes, buffer);        
-        GLES20.glEnableVertexAttribArray(mColorHandle);
-		// This multiplies the view matrix by the model matrix, and stores the result in the MVP matrix
-        // (which currently contains model * view).
         Matrix.multiplyMM(mMVPMatrix, 0, mViewMatrix, 0, mModelMatrix, 0);
-        // This multiplies the modelview matrix by the projection matrix, and stores the result in the MVP matrix
-        // (which now contains model * view * projection).
         Matrix.multiplyMM(mMVPMatrix, 0, mProjectionMatrix, 0, mMVPMatrix, 0);
         GLES20.glUniformMatrix4fv(mMVPMatrixHandle, 1, false, mMVPMatrix, 0);
-        GLES20.glDrawArrays(GLES20.GL_POINTS, 0, buffer.array().length/mStrideBytes);                               
+        GLES20.glDrawArrays(GLES20.GL_POINTS, 0, mNumberOfVertices);                               
 	}
 }
