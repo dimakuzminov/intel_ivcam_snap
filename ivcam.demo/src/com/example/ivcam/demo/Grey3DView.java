@@ -1,6 +1,5 @@
 package com.example.ivcam.demo;
 
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -28,7 +27,7 @@ public class Grey3DView extends Activity implements OnClickListener {
 		mGLSurfaceView.setEGLContextClientVersion(2);
 		final DisplayMetrics displayMetrics = new DisplayMetrics();
 		getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
-		double[] calibData = new double[Calibration.nParamters()];
+		double[] calibData = new double[CalibrationDoublePrecision.nParamters()];
 		readCalibration(calibData);
 		int[] depth = new int[mImageWdith*mImageHeight];
 		readDepthData(depth);
@@ -45,10 +44,11 @@ public class Grey3DView extends Activity implements OnClickListener {
 		}
 		return res;
 	}
+	
 	private void readCalibration(double[] calibData) {
 		InputStream stream = getResources().openRawResource(R.raw.calibration_params);
 		byte[] doubleRaw = new byte[8];
-		for (int i = 0; i<Calibration.nParamters();i++) {
+		for (int i = 0; i<CalibrationDoublePrecision.nParamters();i++) {
 			try {
 				stream.read(doubleRaw);
 				calibData[i] = ByteBuffer.wrap(convertDoubleArrary(doubleRaw)).getDouble();
