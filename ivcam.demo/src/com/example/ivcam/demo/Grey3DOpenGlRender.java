@@ -29,12 +29,12 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 	private final int mColorDataSize = 4;		
 	public volatile float mDeltaX;					
 	public volatile float mDeltaY;	
-	private Calibration mCalibration;
+	private CalibrationDoublePrecision mCalibration;
 	private FloatBuffer mImageVertices;
 	
-	public Grey3DOpenGlRender(float[] calibration, int[] depth, int width, int height)
+	public Grey3DOpenGlRender(double[] calibration, int[] depth, int width, int height)
 	{	
-		mCalibration = new Calibration(calibration, Calibration.nParamters());
+		mCalibration = new CalibrationDoublePrecision(calibration, Calibration.nParamters());
 		setVertices(depth, width, height);
 	}
 	
@@ -42,18 +42,18 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 		int i = 0;
 		int j = 0;
 		int vId = 0;
-		float[] x = new float[1];
-		float[] y = new float[1];
-		float[] z = new float[1];
+		double[] x = new double[1];
+		double[] y = new double[1];
+		double[] z = new double[1];
 		int virticesRawSize=width*height*mStrideBytes;
 		float[] vrtRawData = new float[virticesRawSize];
 		for (; i < width; i++) {
 			for (; j < height; j++) {
 				mCalibration.unproject(i, j, depth[j*width+i], x, y, z);
 				//Coordinate section
-				vrtRawData[vId++] = x[0]; 
-				vrtRawData[vId++] = y[0]; 
-				vrtRawData[vId++] = z[0];
+				vrtRawData[vId++] = (float)x[0]; 
+				vrtRawData[vId++] = (float)y[0]; 
+				vrtRawData[vId++] = (float)z[0];
 				//RGBA section
 				byte green = (byte)(depth[j*width+i]&0xff);
 				byte blue = (byte)(depth[j*width+i]>>8);

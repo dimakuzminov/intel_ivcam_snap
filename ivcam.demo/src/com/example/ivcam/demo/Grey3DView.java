@@ -3,6 +3,7 @@ package com.example.ivcam.demo;
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 
 import android.app.Activity;
 import android.os.Bundle;
@@ -27,7 +28,7 @@ public class Grey3DView extends Activity implements OnClickListener {
 		mGLSurfaceView.setEGLContextClientVersion(2);
 		final DisplayMetrics displayMetrics = new DisplayMetrics();
 		getWindowManager().getDefaultDisplay().getMetrics(displayMetrics);
-		float[] calibData = new float[Calibration.nParamters()];
+		double[] calibData = new double[Calibration.nParamters()];
 		readCalibration(calibData);
 		int[] depth = new int[mImageWdith*mImageHeight];
 		readDepthData(depth);
@@ -37,12 +38,20 @@ public class Grey3DView extends Activity implements OnClickListener {
 		mPreviewButton.setOnClickListener(this);
 		}
 
-	private void readCalibration(float[] calibData) {
+	private byte[] convertDoubleArrary(byte[] src) {
+		byte[] res = new byte[src.length];
+		for ( int i = 0; i<src.length;i++) {
+			res[src.length-i-1] = src[i];
+		}
+		return res;
+	}
+	private void readCalibration(double[] calibData) {
 		InputStream stream = getResources().openRawResource(R.raw.calibration_params);
-		DataInputStream dataStream = new DataInputStream(stream);
+		byte[] doubleRaw = new byte[8];
 		for (int i = 0; i<Calibration.nParamters();i++) {
 			try {
-				calibData[i] = (float)dataStream.readFloat();
+				stream.read(doubleRaw);
+				calibData[i] = ByteBuffer.wrap(convertDoubleArrary(doubleRaw)).getDouble();
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
