@@ -79,7 +79,7 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 				if (truePoint(x[0], y[0], z[0])) {
 					vrtRawData[vId++] = (float) (x[0]);
 					vrtRawData[vId++] = (float) (y[0]);
-					vrtRawData[vId++] = (float) (z[0]);
+					vrtRawData[vId++] = (float) (-z[0]);
 				}
 			}
 		}
@@ -228,8 +228,8 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 		GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT | GLES20.GL_COLOR_BUFFER_BIT);			        
         // Draw the triangle facing straight on.
         Matrix.setIdentityM(mModelMatrix, 0);
-        Matrix.rotateM(mModelMatrix, 0, mDeltaX, 0.0f, 1.0f, 0.0f);
-        Matrix.rotateM(mModelMatrix, 0, mDeltaY, 1.0f, 0.0f, 0.0f);
+        Matrix.rotateM(mModelMatrix, 0, -mDeltaX, 0.0f, 1.0f, 0.0f);
+        Matrix.rotateM(mModelMatrix, 0, -mDeltaY, 1.0f, 0.0f, 0.0f);
         drawImageAsPointsCloud(mImageVertices);
      }	
 	
