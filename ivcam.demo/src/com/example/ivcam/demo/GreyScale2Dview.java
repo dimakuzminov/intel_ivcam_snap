@@ -36,11 +36,15 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 		int j = 0;
 		int i = 0;
 		for (; i < rawData.length;) {
-			colors[j++] = rawData[i] + (rawData[i + 1] << 8);
+			int alpha = rawData[i+1];
+			int red = rawData[i];
+			int green = rawData[i];
+			int blue = rawData[i];
+			colors[j++] =  (alpha<<24)+ (red)+(green << 8)+(blue << 16);
 			i += 2;
 		}
 		Bitmap bmpGrayscale = Bitmap.createBitmap(colors, 640, 480,
-				Bitmap.Config.RGB_565);
+				Bitmap.Config.ARGB_8888);
 		ImageView image = (ImageView) findViewById(R.id.gray_scale_2d_image);
 		image.setImageBitmap(bmpGrayscale);
 	}

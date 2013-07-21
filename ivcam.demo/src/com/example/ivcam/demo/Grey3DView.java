@@ -70,7 +70,7 @@ public class Grey3DView extends Activity implements OnClickListener {
 		int j = 0;
 		int i = 0;
 		for (; i < dataSize;) {
-			depth[j++] = rawData[i] + (rawData[i + 1] << 8);
+			depth[j++] = rawData[i] + (rawData[i+1] << 8);
 			i += 2;
 		}
 	}

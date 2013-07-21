@@ -77,9 +77,9 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 			for (j = 0; j < height; j++) {
 				mCalibration.unproject(i, j, depth[j * width + i], x, y, z);
 				if (truePoint(x[0], y[0], z[0])) {
-					vrtRawData[vId++] = (float) x[0];
-					vrtRawData[vId++] = (float) y[0];
-					vrtRawData[vId++] = (float) z[0];
+					vrtRawData[vId++] = (float) (x[0]);
+					vrtRawData[vId++] = (float) (y[0]);
+					vrtRawData[vId++] = (float) (z[0]);
 				}
 			}
 		}
@@ -226,12 +226,10 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 	public void onDrawFrame(GL10 glUnused) 
 	{
 		GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT | GLES20.GL_COLOR_BUFFER_BIT);			        
-        // Do a complete rotation every 10 seconds.
-        long time = SystemClock.uptimeMillis() % 10000L;
-        float angleInDegrees = (360.0f / 10000.0f) * ((int) time);
         // Draw the triangle facing straight on.
         Matrix.setIdentityM(mModelMatrix, 0);
-        Matrix.rotateM(mModelMatrix, 0, angleInDegrees, 0.0f, 0.0f, 1.0f);        
+        Matrix.rotateM(mModelMatrix, 0, mDeltaX, 0.0f, 1.0f, 0.0f);
+        Matrix.rotateM(mModelMatrix, 0, mDeltaY, 1.0f, 0.0f, 0.0f);
         drawImageAsPointsCloud(mImageVertices);
      }	
 	
