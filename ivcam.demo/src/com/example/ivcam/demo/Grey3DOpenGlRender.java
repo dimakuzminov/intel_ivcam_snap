@@ -73,6 +73,9 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 		mNumberOfVertices = getVerticesNumber(depth, width, height);
 		int virticesRawSize = mNumberOfVertices*mStrideBytes;
 		float[] vrtRawData = new float[virticesRawSize/mBytesPerFloat];
+		double meanX = 0.0, meanY = 0.0, meanZ = 0.0;
+		int points_count = 0;
+		
 		for (; i < width; i++) {
 			for (j = 0; j < height; j++) {
 				mCalibration.unproject(i, j, depth[j * width + i], x, y, z);
@@ -80,8 +83,22 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 					vrtRawData[vId++] = (float) (x[0]);
 					vrtRawData[vId++] = (float) (y[0]);
 					vrtRawData[vId++] = (float) (-z[0]);
+					meanX += x[0];
+					meanY += y[0];
+					meanZ -= z[0];
+					points_count++;
 				}
 			}
+		}
+		meanX /= (double)points_count;
+		meanY /= (double)points_count;
+		meanZ /= (double)points_count;
+		for(i=0;i<points_count*3;i++){
+			vrtRawData[i] -= meanX;
+			i++;
+			vrtRawData[i] -= meanY;
+			i++;
+			vrtRawData[i] -= meanZ;
 		}
 		mImageVertices = ByteBuffer
 				.allocateDirect(vrtRawData.length * mBytesPerFloat)
@@ -93,15 +110,15 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 	public void onSurfaceCreated(GL10 glUnused, EGLConfig config) 
 	{
 		// Set the background clear color to gray.
-		GLES20.glClearColor(0.5f, 0.5f, 0.5f, 0.5f);
+		GLES20.glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		// Position the eye behind the origin.
 		final float eyeX = 0.0f;
 		final float eyeY = 0.0f;
-		final float eyeZ = 1.5f;
+		final float eyeZ = 4.0f;
 		// We are looking toward the distance
 		final float lookX = 0.0f;
 		final float lookY = 0.0f;
-		final float lookZ = -5.0f;
+		final float lookZ = -2.0f;
 		// Set our up vector. This is where our head would be pointing were we holding the camera.
 		final float upX = 0.0f;
 		final float upY = 1.0f;
@@ -114,6 +131,7 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
  
 		  + "void main()                    \n"		// The entry point for our vertex shader.
 		  + "{                              \n"
+		  + "   gl_PointSize = 0.8;        \n"
 		  + "   gl_Position = u_MVPMatrix   \n" 	// gl_Position is a special variable used to store the final position.
 		  + "               * a_Position;   \n"     // Multiply the vertex by the matrix to get the final point in 			                                            			 
 		  + "}                              \n";    // normalized screen coordinates.
@@ -200,7 +218,7 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
         // Set program handles. These will later be used to pass in values to the program.
         mMVPMatrixHandle = GLES20.glGetUniformLocation(programHandle, "u_MVPMatrix");        
         mPositionHandle = GLES20.glGetAttribLocation(programHandle, "a_Position");
-        mColorHandle = GLES20.glGetAttribLocation(programHandle, "a_Color");        
+        mColorHandle = GLES20.glGetAttribLocation(programHandle, "a_Color"); 
         // Tell OpenGL to use this program when rendering.
         GLES20.glUseProgram(programHandle);        
 	}	
@@ -228,14 +246,14 @@ public class Grey3DOpenGlRender  implements GLSurfaceView.Renderer
 		GLES20.glClear(GLES20.GL_DEPTH_BUFFER_BIT | GLES20.GL_COLOR_BUFFER_BIT);			        
         // Draw the triangle facing straight on.
         Matrix.setIdentityM(mModelMatrix, 0);
-        Matrix.rotateM(mModelMatrix, 0, -mDeltaX, 0.0f, 1.0f, 0.0f);
-        Matrix.rotateM(mModelMatrix, 0, -mDeltaY, 1.0f, 0.0f, 0.0f);
+        Matrix.rotateM(mModelMatrix, 0, mDeltaX, 0.0f, 1.0f, 0.0f);
+        Matrix.rotateM(mModelMatrix, 0, mDeltaY, 1.0f, 0.0f, 0.0f);
         drawImageAsPointsCloud(mImageVertices);
      }	
 	
 	private void drawImageAsPointsCloud(FloatBuffer buffer)
 	{	
-		float color[] = {0.0f,0.5f,0.0f,1.0f};
+		float color[] = {0.1f,0.1f,0.1f,0.5f};
 		GLES20.glUniform4fv(mColorHandle, 1, color, 0);
 		buffer.position(mPositionOffset);
         GLES20.glVertexAttribPointer(mPositionHandle, mPositionDataSize, GLES20.GL_FLOAT, false,
