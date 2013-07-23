@@ -4,22 +4,21 @@ import java.io.IOException;
 import java.io.InputStream;
 
 
-
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Bitmap;
-import android.hardware.SensorManager;
 import android.hardware.usb.UsbConstants;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbEndpoint;
 import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
-import android.hardware.usb.UsbRequest;
 import android.os.Bundle;
+import android.os.Message;
+import android.text.Layout;
 import android.util.Log;
 import android.view.View;
 import android.view.View.OnClickListener;
@@ -30,47 +29,70 @@ import android.os.Handler;
 
 public class GreyScale2Dview extends Activity implements OnClickListener {
 	private Button mCaptureButton;
+	//usb related 
     private UsbManager mManager;
     private UsbDevice mDevice = null;
     private UsbDeviceConnection mDeviceConnection = null;
     private UsbInterface mInterface = null;
     private UsbEndpoint mEndpointIn = null;
-    private static final String TAG = "ivcam.demo";
-    private final WaiterThread mWaiterThread = new WaiterThread();
     private PendingIntent mPermissionIntent;
-    private Handler mHandler = new Handler();
-    public byte[] frame = new byte[4*640*480];
-    private final int TIMEOUT = 500;
     private static final String ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION";
+    private final int TIMEOUT = 500;//timeout in miliseconds - in case bulk data is not there...
+    //the USB receiver thread
+    private final WaiterThread mWaiterThread = new WaiterThread(this);
+    //single buffer to hold frames
+    public byte[] frame = new byte[2*640*480];
+    //NOTE: todo: lock the frame between the intent and thread or use dynamic memory.
+    //for logging
+    private static final String TAG = "ivcam.demo";
+    private Handler mHandler;
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
+		boolean bDeviceExists = false;
 		super.onCreate(savedInstanceState);
-        mManager = (UsbManager)getSystemService(Context.USB_SERVICE);
-        // check for existing devices
-        mPermissionIntent = PendingIntent.getBroadcast((Context)this, 0, new Intent(ACTION_USB_PERMISSION), 0);
-        // listen for new devices
-        IntentFilter filter = new IntentFilter();
-        filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
-        filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        filter.addAction(ACTION_USB_PERMISSION);
-        registerReceiver(mUsbReceiver, filter);
-       for (UsbDevice device :  mManager.getDeviceList().values()) {
-        	if(device.getVendorId() != 0x04b4 || device.getProductId() != 0x00f1){
-        		continue;
-        	}
-            mManager.requestPermission(device, mPermissionIntent);
-        	setupDevice(device);
-        	break;
-        }
+		//setup the USB
+		mManager = (UsbManager)getSystemService(Context.USB_SERVICE);
+		// check for existing devices
+		mPermissionIntent = PendingIntent.getBroadcast((Context)this, 0, new Intent(ACTION_USB_PERMISSION), 0);
+		// listener for new devices
+		IntentFilter filter = new IntentFilter();
+		filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
+		filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
+		filter.addAction(ACTION_USB_PERMISSION);
+		registerReceiver(mUsbReceiver, filter);
+	    mHandler = new Handler() {
+	        @Override
+	        public void handleMessage(Message msg) {
+	            switch (msg.what) {
+	                case 0:
+	                case 10:
+	               	default:
+	                    redrawView();
+	                    break;
+	            }
+	        }
+	    };
+		for (UsbDevice device :  mManager.getDeviceList().values()) {
+			if(device.getVendorId() != 0x04b4 || device.getProductId() != 0x00f1){
+				continue;
+			}
+			mManager.requestPermission(device, mPermissionIntent);
+			bDeviceExists = setupDevice(device);
+			break;
+		}
+		if(bDeviceExists == false){
+			throw new RuntimeException("usb not initialized\n");
+		}
 		setContentView(R.layout.activity_grey_scale2_dview);
 		mCaptureButton = (Button) findViewById(R.id.capture_button);
 		mCaptureButton.setOnClickListener(this);
-    	mWaiterThread.run();
-		//set2DImageView();
+		//TODO: add an exception if there is no device? or wait for one?
+//	    set2DImageView(); //fixed resource demo only
 	}
 
     @Override
     public void onDestroy() {
+    	mWaiterThread.mStop = true;
         unregisterReceiver(mUsbReceiver);
         setupDevice(null);
         super.onDestroy();
@@ -78,6 +100,7 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 
     // Sets the current USB device and interface
     private boolean setupDevice(UsbDevice device) {
+    	boolean retval = false;
     	UsbInterface intf = null;
         if (mDeviceConnection != null) {
             // stop the thread that receives images here (if exists)
@@ -91,7 +114,6 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
             mDeviceConnection = null;
             mEndpointIn = null;
         }
-
         if (device != null) {
         	intf = device.getInterface(0);
         	if(intf != null){
@@ -107,7 +129,10 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 	                    	mEndpointIn = intf.getEndpoint(i);
 	                    	if (mEndpointIn.getType() == UsbConstants.USB_ENDPOINT_XFER_BULK) {
 	                    		if (mEndpointIn.getDirection() == UsbConstants.USB_DIR_IN) {
-	                    			return true;
+	                    			if(mWaiterThread.isAlive() == false)
+	                    				mWaiterThread.start();
+	                    			retval = true;
+	                    			break;
 	                    		}
 	                    	}
 	                    }
@@ -117,9 +142,10 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 	            }
         	}
         }
-        return false;
+        return retval;
     }
-    
+
+    //hanldes the USB related intents
     BroadcastReceiver mUsbReceiver = new BroadcastReceiver() {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
@@ -149,6 +175,79 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
         }
     };
 
+	@Override
+	public void onClick(View v) {
+		switch (v.getId()) {
+		case R.id.capture_button:
+			mWaiterThread.mStop = true;
+			Intent grey3DView = new Intent(this, Grey3DView.class);
+			startActivity(grey3DView);
+			break;
+		}
+	}
+	public void refreshView(){
+		runOnUiThread(new Runnable(){			
+		@Override
+            public void run() { redrawView(); }});
+		
+//		mHandler.post( );
+//		Message msg = Message.obtain(mHandler, 10);
+		
+//		mHandler.sendMessage(msg);
+//		boolean ret = mHandler.sendEmptyMessage(0);
+		
+//		mHandler.sendEmptyMessage(10);
+//		notify();
+	}
+
+    private class WaiterThread extends Thread {
+    	int i;
+        public boolean mStop;
+        public GreyScale2Dview mActivity;
+        public WaiterThread(GreyScale2Dview activity){
+        	mActivity = activity;
+        }
+        public void run() {
+        	mStop = false;
+        	i=0;
+            while (true) {
+                synchronized (this) {
+                    if (mStop) {
+                        return;
+                    }
+                }
+                mActivity.mDeviceConnection.bulkTransfer(mEndpointIn, frame, 2*640*480, TIMEOUT);
+                i++;
+                //send the message to the activity's message queue
+                if(i==30){
+                	mActivity.refreshView();
+                	i=0;
+                }
+            }
+        }
+    }
+
+
+    private void redrawView() {
+ 		int[] colors = new int[640 * 480];
+		for (int i = 0; i < 640*480;i++) {
+			short val = (short)(frame[2*i]);
+			val += 256 * (short)(frame[1+2*i]);
+			int alpha = 255;
+			int red = val;///256;
+			int green = val;///256;
+			int blue = val;///256;
+			colors[i] =  (alpha<<24)+ (red)+(green << 8)+(blue << 16);
+		}
+		Bitmap bmpGrayscale = Bitmap.createBitmap(colors, 640, 480,
+				Bitmap.Config.ARGB_8888);
+		ImageView image = (ImageView) findViewById(R.id.gray_scale_2d_image);
+		image.setImageBitmap(bmpGrayscale);
+
+    	//set2DImageView();
+    }
+/*    
+    //used for a static resource demo only
 	private void set2DImageView() {
 		InputStream stream = getResources().openRawResource(R.raw.hand0_0000);
 		byte[] rawData = new byte[614400];
@@ -172,62 +271,7 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 				Bitmap.Config.ARGB_8888);
 		ImageView image = (ImageView) findViewById(R.id.gray_scale_2d_image);
 		image.setImageBitmap(bmpGrayscale);
+		image.invalidate();
 	}
-
-	@Override
-	public void onClick(View v) {
-		switch (v.getId()) {
-		case R.id.capture_button:
-			mWaiterThread.mStop = true;
-			Intent grey3DView = new Intent(this, Grey3DView.class);
-			startActivity(grey3DView);
-			break;
-		}
-	}
-
-	// This gets executed in a non-UI thread:
-    public void getDrawFrame() {
-        mDeviceConnection.bulkTransfer(mEndpointIn, frame, 2*640*480, TIMEOUT);
- //       Log.e(TAG, "got a packet\n");
-        mHandler.post(new Runnable() {
-            @Override
-            public void run() {
-            	set2DImageView();
-/*
-                // This gets executed on the UI thread so it can safely modify Views
-        		int[] colors = new int[640 * 480];
-        		int j = 0;
-        		int i = 0;
-        		for (; i < 2*640*480;) {
-        			short greycolor = (short)((short)frame[i] | (short)frame[i+1]<<8);
-        			int alpha = 255;
-        			int red = (greycolor >> 8);
-        			int green = greycolor >> 8;
-        			int blue = 255 - (greycolor >> 8);
-        			colors[j++] =  (alpha<<24)+ (red)+(green << 8)+(blue << 16);
-        			i += 2;
-        		}
-        		Bitmap bmpGrayscale = Bitmap.createBitmap(colors, 640, 480,
-        				Bitmap.Config.ARGB_8888);
-        		ImageView image = (ImageView) findViewById(R.id.gray_scale_2d_image);
-        		image.setImageBitmap(bmpGrayscale);
 */
-            }
-        });
-    }	
-
-    private class WaiterThread extends Thread {
-        public boolean mStop;
-        public void run() {
-        	mStop = false;
-            while (true) {
-                synchronized (this) {
-                    if (mStop) {
-                        return;
-                    }
-                }
-                getDrawFrame();
-            }
-        }
-    }
 }
