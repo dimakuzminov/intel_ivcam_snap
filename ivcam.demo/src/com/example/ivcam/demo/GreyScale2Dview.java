@@ -2,6 +2,14 @@ package com.example.ivcam.demo;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.LinkedList;
+import java.util.NoSuchElementException;
+import java.util.concurrent.ConcurrentLinkedQueue;
+
+import android.hardware.usb.UsbRequest;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 
 import android.app.Activity;
@@ -16,6 +24,7 @@ import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbEndpoint;
 import android.hardware.usb.UsbInterface;
 import android.hardware.usb.UsbManager;
+import android.hardware.usb.UsbRequest;
 import android.os.Bundle;
 import android.os.Message;
 import android.text.Layout;
@@ -40,16 +49,23 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
     private final int TIMEOUT = 500;//timeout in miliseconds - in case bulk data is not there...
     //the USB receiver thread
     private final WaiterThread mWaiterThread = new WaiterThread(this);
-    //single buffer to hold frames
-    public byte[] frame = new byte[2*640*480];
+    //pool to hold frames
+    private final ConcurrentLinkedQueue<ByteBuffer> mFramePool = new ConcurrentLinkedQueue<ByteBuffer>();
+    private final ConcurrentLinkedQueue<ByteBuffer> mFrameQueue = new ConcurrentLinkedQueue<ByteBuffer>();
     //NOTE: todo: lock the frame between the intent and thread or use dynamic memory.
     //for logging
     private static final String TAG = "ivcam.demo";
     private Handler mHandler;
+	private int[] colors;
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		boolean bDeviceExists = false;
 		super.onCreate(savedInstanceState);
+		colors = new int[640 * 480];
+	    for(int i = 0;i<2;i++){
+	        ByteBuffer frame = ByteBuffer.allocate(614416);
+	        mFramePool.add(frame);
+	    }
 		//setup the USB
 		mManager = (UsbManager)getSystemService(Context.USB_SERVICE);
 		// check for existing devices
@@ -77,12 +93,12 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 				continue;
 			}
 			mManager.requestPermission(device, mPermissionIntent);
-			bDeviceExists = setupDevice(device);
+//			bDeviceExists = setupDevice(device);
 			break;
 		}
-		if(bDeviceExists == false){
-			throw new RuntimeException("usb not initialized\n");
-		}
+//		if(bDeviceExists == false){
+//			throw new RuntimeException("usb not initialized\n");
+//		}
 		setContentView(R.layout.activity_grey_scale2_dview);
 		mCaptureButton = (Button) findViewById(R.id.capture_button);
 		mCaptureButton.setOnClickListener(this);
@@ -179,7 +195,6 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 	public void onClick(View v) {
 		switch (v.getId()) {
 		case R.id.capture_button:
-			mWaiterThread.mStop = true;
 			Intent grey3DView = new Intent(this, Grey3DView.class);
 			startActivity(grey3DView);
 			break;
@@ -189,58 +204,113 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 		runOnUiThread(new Runnable(){			
 		@Override
             public void run() { redrawView(); }});
-		
-//		mHandler.post( );
-//		Message msg = Message.obtain(mHandler, 10);
-		
-//		mHandler.sendMessage(msg);
-//		boolean ret = mHandler.sendEmptyMessage(0);
-		
-//		mHandler.sendEmptyMessage(10);
-//		notify();
+	}
+	
+	public UsbRequest AllocRequest(){
+        UsbRequest request = new UsbRequest();
+        request.initialize(mDeviceConnection, mEndpointIn);
+        return request;
 	}
 
     private class WaiterThread extends Thread {
     	int i;
+        // pool of requests for the IN endpoint
+        private final LinkedList<UsbRequest> mReqPool = new LinkedList<UsbRequest>();
+        private final LinkedList<ByteBuffer> mBufPool = new LinkedList<ByteBuffer>();
         public boolean mStop;
         public GreyScale2Dview mActivity;
         public WaiterThread(GreyScale2Dview activity){
         	mActivity = activity;
         }
+        
         public void run() {
+        	ByteBuffer frame;
         	mStop = false;
-        	i=0;
+        	int j;
+        	UsbRequest req;
+        	ByteBuffer buf;
+        	for(int i=0;i<38;i++){
+                req = AllocRequest();
+                mReqPool.addFirst(req);
+            	buf = ByteBuffer.allocate(16384);
+        		mBufPool.addFirst(buf);
+        	}
+            for(j = 0; j<10;j++){
+                req = mReqPool.getFirst();
+                buf = mBufPool.getFirst();
+                buf.rewind();
+                req.setClientData(buf);
+            	req.queue(buf, 16384);
+            }
             while (true) {
                 synchronized (this) {
                     if (mStop) {
                         return;
                     }
                 }
-                mActivity.mDeviceConnection.bulkTransfer(mEndpointIn, frame, 2*640*480, TIMEOUT);
-                i++;
-                //send the message to the activity's message queue
-                if(i==30){
-                	mActivity.refreshView();
-                	i=0;
+                
+                try{
+                	frame = mFramePool.remove();
+                }catch(NoSuchElementException e){
+                	Log.e(TAG, "no frame to fill\n");
+                	Thread.yield();
+                	continue;
                 }
+            	frame.rewind();
+                for(j = 0; j<38;j++){
+                    req = mDeviceConnection.requestWait();
+                    buf = (ByteBuffer)req.getClientData();
+                    req.setClientData(null);
+                	buf.rewind();
+                	frame.rewind();
+                	frame.put(buf);
+                	mBufPool.addLast(buf);
+                	mReqPool.addLast(req);
+                    req = mReqPool.getFirst();
+                    buf = mBufPool.getFirst();
+                    buf.rewind();
+                    req.setClientData(buf);
+                	req.queue(buf, 16384);
+                }
+            	Log.d(TAG,"frame length = "+frame.capacity()+" \n");
+            	frame.rewind();
+               	mFrameQueue.add(frame);
+            	mActivity.refreshView();
+            	Thread.yield();
             }
         }
     }
 
 
     private void redrawView() {
- 		int[] colors = new int[640 * 480];
+    	Log.d(TAG,"entering redraw\n");
+ 		ByteBuffer frame;
+        try{
+           	frame = mFrameQueue.remove();
+        }catch(NoSuchElementException e){
+        	Log.e(TAG, "no frame to render\n");
+        	return;
+        }
+ 		frame.rewind();
+ 		frame.position(16);
+ 		short val;
+
 		for (int i = 0; i < 640*480;i++) {
-			short val = (short)(frame[2*i]);
-			val += 256 * (short)(frame[1+2*i]);
-			int alpha = 255;
-			int red = val;///256;
-			int green = val;///256;
-			int blue = val;///256;
-			colors[i] =  (alpha<<24)+ (red)+(green << 8)+(blue << 16);
+			
+//			short val = (short)(frame.array()[2*i]);
+//			val += 256 * (short)(frame.array()[1+2*i]);
+//			short val = frame.getShort(i);
+//			int alpha = 255;
+//			int red = 70;//val/256;
+//			int green = val/256;
+//			int blue = val/256;
+			val = frame.getShort();
+			colors[i] =  (int) val;
 		}
-		Bitmap bmpGrayscale = Bitmap.createBitmap(colors, 640, 480,
-				Bitmap.Config.ARGB_8888);
+ 		
+		frame.rewind();
+		mFramePool.add(frame);
+		Bitmap bmpGrayscale = Bitmap.createBitmap(colors, 640, 480,	Bitmap.Config.ARGB_8888);
 		ImageView image = (ImageView) findViewById(R.id.gray_scale_2d_image);
 		image.setImageBitmap(bmpGrayscale);
 
