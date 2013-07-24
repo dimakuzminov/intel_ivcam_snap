@@ -294,7 +294,7 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
  		frame.rewind();
  		frame.position(16);
  		short val;
-
+/*
 		for (int i = 0; i < 640*480;i++) {
 			
 //			short val = (short)(frame.array()[2*i]);
@@ -307,7 +307,7 @@ public class GreyScale2Dview extends Activity implements OnClickListener {
 			val = frame.getShort();
 			colors[i] =  (int) val;
 		}
- 		
+*/
 		frame.rewind();
 		mFramePool.add(frame);
 		Bitmap bmpGrayscale = Bitmap.createBitmap(colors, 640, 480,	Bitmap.Config.ARGB_8888);
